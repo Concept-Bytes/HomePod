@@ -30,9 +30,9 @@ Before you begin, ensure you have the following:
     
     ```python
     # Example placeholder in assist.py
-    openai.api_key = "your_openai_api_key_here"
-    assistant_id = "your_assistant_id_here"
-    thread_id = "your_thread_id_here"
+    API_KEY = "your_openai_api_key_here"
+   ASSISTANT_ID = "your_assistant_id_here"
+   THREAD_ID = "your_thread_id_here"
 
     
 ## Running the Application
