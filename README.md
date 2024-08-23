@@ -29,7 +29,7 @@ Before you begin, ensure you have the following:
    Rename this to just .env
     
     ```python
-    # Example placeholder in assist.py
+    # Example placeholder in .env
     API_KEY = "your_openai_api_key_here"
    ASSISTANT_ID = "your_assistant_id_here"
    THREAD_ID = "your_thread_id_here"
