@@ -47,6 +47,6 @@ def TTS(text):
     os.remove(speech_file_path)
     return "done"
 
-question = "make it slightly vary every time"
-response = ask_question_memory(question)
-print(response)
+# question = "make it slightly vary every time"
+# response = ask_question_memory(question)
+# print(response)
