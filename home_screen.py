@@ -2,17 +2,12 @@ import pygame
 import math
 import sys
 import os
-import time
-from dotenv import load_dotenv
-from multiprocessing import Process
-
-# Load environment variables from .env file
-load_dotenv()
+from multiprocessing import Process, Queue
 
 class AppCircle:
     def __init__(self, center, app_index, screen_size):
         self.center = center
-        self.radius = min(screen_size) // 10  # Example radius
+        self.radius = min(screen_size) // 10
         self.app_index = app_index
         self.image = self.load_image(app_index)
         self.text = f'App {app_index}'
@@ -56,7 +51,6 @@ def create_circles(screen_size):
     return circles
 
 def fade_text_in(screen, text_surfaces, text_rects, background, circles, duration=1.0):
-    """Fade the text in."""
     for alpha in range(0, 256, int(256 / (duration * 60))):
         screen.blit(background, (0, 0))
         for circle in circles:
@@ -68,7 +62,6 @@ def fade_text_in(screen, text_surfaces, text_rects, background, circles, duratio
         pygame.time.delay(int(1000 / 60))
 
 def fade_text_out(screen, text_surfaces, text_rects, background, circles, duration=1.0):
-    """Fade the text out."""
     for alpha in range(255, -1, -int(256 / (duration * 60))):
         screen.blit(background, (0, 0))
         for circle in circles:
@@ -91,7 +84,7 @@ def create_text_surfaces(response, font, screen_width, margin):
         else:
             lines.append(' '.join(current_line))
             current_line = [word]
-    lines.append(' '.join(current_line))  # Add the last line
+    lines.append(' '.join(current_line))
 
     text_surfaces = [font.render(line, True, (255, 255, 255)) for line in lines]
     total_height = sum(surface.get_height() for surface in text_surfaces)
@@ -102,24 +95,102 @@ def create_text_surfaces(response, font, screen_width, margin):
     return text_surfaces, text_rects
 
 def display_response(screen, response, background, circles):
-    font = pygame.font.Font(None, 36)  # Adjust font size to fit better
-    margin = screen.get_width() // 4  # Increase the margin to narrow the text area
+    font = pygame.font.Font(None, 36)
+    margin = screen.get_width() // 4
     text_surfaces, text_rects = create_text_surfaces(response, font, screen.get_width(), margin)
     fade_text_in(screen, text_surfaces, text_rects, background, circles)
-    pygame.time.delay(15000)  # Display for 15 seconds
+    pygame.time.delay(15000)
     fade_text_out(screen, text_surfaces, text_rects, background, circles)
 
-def run_home_screen(screen):
+def apply_blur_and_ring(screen, blue_ring_thickness=100):
+    """Apply a blur effect to the whole screen and a subtle transparent blue ring."""
+    # Create a blurred screen copy
+    screen_copy = pygame.Surface(screen.get_size())
+    screen_copy.blit(screen, (0, 0))
+
+    for _ in range(10):  # Simulate blur by scaling down and back up
+        screen_copy = pygame.transform.smoothscale(screen_copy, (screen.get_width() // 2, screen.get_height() // 2))
+        screen_copy = pygame.transform.smoothscale(screen_copy, screen.get_size())
+
+    # Draw the blurred screen
+    screen.blit(screen_copy, (0, 0))
+
+    # Create a transparent surface for the gradient ring effect
+    ring_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+
+    # Define the gradient effect
+    center = (screen.get_width() // 2, screen.get_height() // 2)
+    outer_radius = screen.get_width() // 2
+    inner_radius = outer_radius - blue_ring_thickness
+
+    for i in range(outer_radius, inner_radius, -1):
+        # Calculate the alpha value for transparency that fades towards the center
+        alpha = int(128 * (i - inner_radius) / blue_ring_thickness)
+        pygame.draw.circle(ring_surface, (173, 216, 230, alpha), center, i)
+
+    screen.blit(ring_surface, (0, 0))
+
+def fade_text_with_blur(screen, text_surfaces, text_rects, circles, background, blur=True, duration=0.2, fade_in=True):
+    """Fade in or out the text with optional blur effect."""
+    step = int(256 / (duration * 60))
+    if not fade_in:
+        step = -step
+
+    alpha_values = range(0, 256, step) if fade_in else range(255, -1, step)
+    for alpha in alpha_values:
+        screen.blit(background, (0, 0))  # Draw the background first
+
+        # Draw circles (apps) on top of the background
+        for circle in circles:
+            circle.draw(screen)
+
+        # Apply blur and ring effect if needed
+        if blur:
+            apply_blur_and_ring(screen, blue_ring_thickness=100)
+
+        # Fade in or out text surfaces
+        for text_surface, text_rect in zip(text_surfaces, text_rects):
+            text_surface.set_alpha(alpha)
+            screen.blit(text_surface, text_rect)
+
+        pygame.display.flip()
+        pygame.time.delay(int(1000 / 60))
+
+def display_query(screen, query, circles, background):
+    """Display the query with blur and ring effect, and fade-in the text."""
+    font = pygame.font.Font(None, 36)
+    margin = screen.get_width() // 4
+    text_surfaces, text_rects = create_text_surfaces(query, font, screen.get_width(), margin)
+
+    # Fade in the text with the blur effect
+    fade_text_with_blur(screen, text_surfaces, text_rects, circles, background, blur=True, fade_in=True)
+    return text_surfaces, text_rects
+
+def display_response(screen, response, circles, background):
+    """Display the response with blur and ring effect, and fade-in the text."""
+    font = pygame.font.Font(None, 36)
+    margin = screen.get_width() // 4
+    text_surfaces, text_rects = create_text_surfaces(response, font, screen.get_width(), margin)
+
+    # Fade in the response with the blur effect
+    fade_text_with_blur(screen, text_surfaces, text_rects, circles, background, blur=True, fade_in=True)
+    return text_surfaces, text_rects
+
+def run_home_screen(screen, query_queue, response_queue):
     screen_size = screen.get_size()
     background = pygame.image.load('./resources/background.jpg')
     background = pygame.transform.scale(background, screen_size)
     
     circles = create_circles(screen_size)
     
-    voice_assistant_process = Process(target=start_voice_assistant)
-    voice_assistant_process.start()
-
     running = True
+    query_displayed = False
+    response_displayed = False
+    query_surfaces = []
+    query_rects = []
+    response_surfaces = []
+    response_rects = []
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -133,28 +204,62 @@ def run_home_screen(screen):
                         mod = __import__(app_module_name, fromlist=[''])
                         mod.run(screen)
 
-        screen.blit(background, (0, 0))
+        # Check if there is a new response to display first
+        if not response_queue.empty():
+            response = response_queue.get()
 
-        for circle in circles:
-            circle.draw(screen)
+            if query_displayed:
+                # Immediately fade out the query much faster
+                fade_text_with_blur(screen, query_surfaces, query_rects, circles, background, blur=True, duration=0.1, fade_in=False)
+                query_displayed = False
+
+            # Display response with blur
+            response_surfaces, response_rects = display_response(screen, response, circles, background)
+            response_displayed = True
+
+        # Check if there is a new query from the voice assistant
+        elif not query_queue.empty():
+            query = query_queue.get()
+            print(f"Received query: {query}")
+
+            # Start the blur effect and display the query
+            query_surfaces, query_rects = display_query(screen, query, circles, background)
+            query_displayed = True
+
+        # After the response has been displayed for some time, fade everything out
+        if response_displayed:
+            pygame.time.delay(3000)  # Shorter delay to speed up transition
+            # Fade out the response and blur effect
+            fade_text_with_blur(screen, response_surfaces, response_rects, circles, background, blur=True, duration=0.5, fade_in=False)
+            response_displayed = False
+
+        # Draw the normal screen when there is no query or response to show
+        if not query_displayed and not response_displayed:
+            screen.blit(background, (0, 0))  # Draw background first
+            for circle in circles:  # Then draw apps (circles)
+                circle.draw(screen)
+
         pygame.display.flip()
-
-        # Check response.txt for any response
-        if os.path.exists("response.txt"):
-            with open("response.txt", "r") as file:
-                response = file.read().strip()
-            if response:
-                display_response(screen, response, background, circles)
-                # Clear the response from the file
-                open("response.txt", "w").close()
-
         pygame.time.delay(1)
 
-def start_voice_assistant():
+
+
+
+def start_voice_assistant(query_queue, response_queue):
     import jarvis
-    jarvis.run_voice_assistant()
+    jarvis.run_voice_assistant(query_queue, response_queue)
 
 if __name__ == '__main__':
     pygame.init()
     screen = pygame.display.set_mode((1080, 1080))
-    run_home_screen(screen)
+
+    # Set up queues for communication
+    query_queue = Queue()
+    response_queue = Queue()
+
+    # Start the voice assistant process
+    voice_assistant_process = Process(target=start_voice_assistant, args=(query_queue, response_queue))
+    voice_assistant_process.start()
+
+    # Run the home screen
+    run_home_screen(screen, query_queue, response_queue)
