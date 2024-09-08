@@ -2,7 +2,10 @@ import pygame
 import math
 import sys
 import os
-from multiprocessing import Process, Queue
+import assist
+import time
+import tools
+from RealtimeSTT import AudioToTextRecorder
 
 class AppCircle:
     def __init__(self, center, app_index, screen_size):
@@ -176,7 +179,7 @@ def display_response(screen, response, circles, background):
     fade_text_with_blur(screen, text_surfaces, text_rects, circles, background, blur=True, fade_in=True)
     return text_surfaces, text_rects
 
-def run_home_screen(screen, query_queue, response_queue):
+def run_home_screen(screen,):
     screen_size = screen.get_size()
     background = pygame.image.load('./resources/background.jpg')
     background = pygame.transform.scale(background, screen_size)
@@ -191,6 +194,13 @@ def run_home_screen(screen, query_queue, response_queue):
     response_surfaces = []
     response_rects = []
 
+
+    recorder = AudioToTextRecorder(spinner=False, model="tiny.en", language="en", post_speech_silence_duration=0.1, silero_sensitivity=0.4)
+    hot_words = ["jarvis", "alexa"]
+    skip_hot_word_check = False
+    print("Say something...")
+
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -204,27 +214,40 @@ def run_home_screen(screen, query_queue, response_queue):
                         mod = __import__(app_module_name, fromlist=[''])
                         mod.run(screen)
 
-        # Check if there is a new response to display first
-        if not response_queue.empty():
-            response = response_queue.get()
+        current_text = recorder.text()
+        print(current_text)
+        if any(hot_word in current_text.lower() for hot_word in hot_words) or skip_hot_word_check:
+            if current_text:
+                print("User: " + current_text)
 
-            if query_displayed:
-                # Immediately fade out the query much faster
-                fade_text_with_blur(screen, query_surfaces, query_rects, circles, background, blur=True, duration=0.1, fade_in=False)
-                query_displayed = False
+                # Start the blur effect and display the query
+                query_surfaces, query_rects = display_query(screen, current_text, circles, background)
+                query_displayed = True
 
-            # Display response with blur
-            response_surfaces, response_rects = display_response(screen, response, circles, background)
-            response_displayed = True
+                recorder.stop()
+                current_text = current_text + " " + time.strftime("%Y-%m-%d %H-%M-%S")
+                response = assist.ask_question_memory(current_text)
+                print(response)
+                speech = response.split('#')[0]
+                
 
-        # Check if there is a new query from the voice assistant
-        elif not query_queue.empty():
-            query = query_queue.get()
-            print(f"Received query: {query}")
+                if query_displayed:
+                    # Immediately fade out the query much faster
+                    fade_text_with_blur(screen, query_surfaces, query_rects, circles, background, blur=True, duration=0.1, fade_in=False)
+                    query_displayed = False
 
-            # Start the blur effect and display the query
-            query_surfaces, query_rects = display_query(screen, query, circles, background)
-            query_displayed = True
+                response_surfaces, response_rects = display_response(screen, response, circles, background)
+                response_displayed = True
+
+                done = assist.TTS(speech)
+                # skip_hot_word_check = True if "?" in response else False
+                if len(response.split('#')) > 1:
+                    command = response.split('#')[1]
+                    tools.parse_command(command)
+                recorder.start()
+
+
+            
 
         # After the response has been displayed for some time, fade everything out
         if response_displayed:
@@ -245,21 +268,11 @@ def run_home_screen(screen, query_queue, response_queue):
 
 
 
-def start_voice_assistant(query_queue, response_queue):
-    import jarvis
-    jarvis.run_voice_assistant(query_queue, response_queue)
+
 
 if __name__ == '__main__':
     pygame.init()
     screen = pygame.display.set_mode((1080, 1080))
 
-    # Set up queues for communication
-    query_queue = Queue()
-    response_queue = Queue()
-
-    # Start the voice assistant process
-    voice_assistant_process = Process(target=start_voice_assistant, args=(query_queue, response_queue))
-    voice_assistant_process.start()
-
     # Run the home screen
-    run_home_screen(screen, query_queue, response_queue)
+    run_home_screen(screen,)
