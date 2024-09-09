@@ -4,13 +4,15 @@ from pygame import mixer
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
+
 #https://platform.openai.com/playground/assistants
 # Initialize the client and mixer
 client = OpenAI(default_headers={"OpenAI-Beta": "assistants=v2"}, api_key= os.getenv('API_KEY'))
 mixer.init()
 
-# Load environment variables from .env file
-load_dotenv()
+
 
 # Retrieve the assistant and thread
 assistant = client.beta.assistants.retrieve(os.getenv('ASSISTANT_ID'))
