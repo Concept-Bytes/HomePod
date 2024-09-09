@@ -54,27 +54,6 @@ def create_circles(screen_size):
         circles.append(AppCircle((x, y), i + 1, screen_size))
     return circles
 
-def fade_text_in(screen, text_surfaces, text_rects, background, circles, duration=1.0):
-    for alpha in range(0, 256, int(256 / (duration * 60))):
-        screen.blit(background, (0, 0))
-        for circle in circles:
-            circle.draw(screen)
-        for text_surface, text_rect in zip(text_surfaces, text_rects):
-            text_surface.set_alpha(alpha)
-            screen.blit(text_surface, text_rect)
-        pygame.display.flip()
-        pygame.time.delay(int(1000 / 60))
-
-def fade_text_out(screen, text_surfaces, text_rects, background, circles, duration=1.0):
-    for alpha in range(255, -1, -int(256 / (duration * 60))):
-        screen.blit(background, (0, 0))
-        for circle in circles:
-            circle.draw(screen)
-        for text_surface, text_rect in zip(text_surfaces, text_rects):
-            text_surface.set_alpha(alpha)
-            screen.blit(text_surface, text_rect)
-        pygame.display.flip()
-        pygame.time.delay(int(1000 / 60))
 
 def create_text_surfaces(response, font, screen_width, margin):
     words = response.split()
@@ -98,28 +77,15 @@ def create_text_surfaces(response, font, screen_width, margin):
 
     return text_surfaces, text_rects
 
-def display_response(screen, response, background, circles):
-    font = pygame.font.Font(None, 36)
-    margin = screen.get_width() // 4
-    text_surfaces, text_rects = create_text_surfaces(response, font, screen.get_width(), margin)
-    fade_text_in(screen, text_surfaces, text_rects, background, circles)
-    pygame.time.delay(15000)
-    fade_text_out(screen, text_surfaces, text_rects, background, circles)
-
 def apply_blur_ring_and_text(screen, text, blue_ring_thickness=100):
-    """Apply a blur effect to the screen, draw a subtle transparent blue ring, and overlay text."""
+    """Apply a simplified blur effect to the screen, draw a subtle transparent blue ring, and overlay text."""
     
-    # Create a blurred screen copy
-    screen_copy = pygame.Surface(screen.get_size())
-    screen_copy.blit(screen, (0, 0))
-
-    # Simulate blur by scaling down and back up multiple times
-    for _ in range(10):
-        screen_copy = pygame.transform.smoothscale(screen_copy, (screen.get_width() // 2, screen.get_height() // 2))
-        screen_copy = pygame.transform.smoothscale(screen_copy, screen.get_size())
+    # Create a semi-transparent surface for the blur effect
+    blur_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+    blur_surface.fill((0, 0, 0, 128))  # Fill with semi-transparent black (adjust alpha for blur intensity)
 
     # Draw the blurred screen back onto the main screen
-    screen.blit(screen_copy, (0, 0))
+    screen.blit(blur_surface, (0, 0))
 
     # Create a transparent surface for the gradient ring effect
     ring_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
@@ -147,64 +113,7 @@ def apply_blur_ring_and_text(screen, text, blue_ring_thickness=100):
         screen.blit(text_surface, text_rect)
 
     # Update the display to show changes
-    pygame.display.flip()
-
-def fade_text_with_blur(screen, text_surfaces, text_rects, circles, background, blur=True, duration=0.2, fade_in=True):
-    """Fade in or out the text with optional blur effect."""
-    fps = 60  # Frames per second
-    total_frames = int(duration * fps)
-    alpha_values = range(0, 256, int(256 / total_frames)) if fade_in else range(255, -1, -int(256 / total_frames))
-    
-    for alpha in alpha_values:
-        screen.blit(background, (0, 0))  # Draw the background first
-
-        # Draw circles (apps) on top of the background
-        for circle in circles:
-            circle.draw(screen)
-
-        # Apply blur and ring effect if needed
-        if blur:
-            apply_blur_and_ring(screen, blue_ring_thickness=100)
-
-        # Fade in or out text surfaces
-        for text_surface, text_rect in zip(text_surfaces, text_rects):
-            text_surface.set_alpha(alpha)
-            screen.blit(text_surface, text_rect)
-
-        pygame.display.flip()
-        pygame.time.delay(int(1000 / fps))  # Use the frame rate to control the delay
-
-def display_query(screen, query, circles, background):
-    """Display the query text without any additional effects."""
-    font = pygame.font.Font(None, 36)  # Set font and size
-    margin = screen.get_width() // 4
-    text_surfaces, text_rects = create_text_surfaces(query, font, screen.get_width(), margin)
-
-    # Draw the background
-    screen.blit(background, (0, 0))
-
-    # Draw circles (apps) on top of the background
-    for circle in circles:
-        circle.draw(screen)
-
-    # Draw text surfaces on the screen
-    for text_surface, text_rect in zip(text_surfaces, text_rects):
-        screen.blit(text_surface, text_rect)
-
-    # Update the display
-    pygame.display.flip()
-
-    return text_surfaces, text_rects
-
-def display_response(screen, response, circles, background):
-    """Display the response with blur and ring effect, and fade-in the text."""
-    font = pygame.font.Font(None, 36)
-    margin = screen.get_width() // 4
-    text_surfaces, text_rects = create_text_surfaces(response, font, screen.get_width(), margin)
-
-    # Fade in the response with the blur effect
-    fade_text_with_blur(screen, text_surfaces, text_rects, circles, background, blur=True, fade_in=True)
-    return text_surfaces, text_rects
+    pygame.display.update()
 
 def run_voice_assistant(circles, screen, background, draw_event, idle_event):
     recorder = AudioToTextRecorder(spinner=False, model="tiny.en", language="en", post_speech_silence_duration=0.1, silero_sensitivity=0.4)
