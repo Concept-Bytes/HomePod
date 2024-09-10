@@ -53,14 +53,17 @@ def get_scores(sports):
                 teams = game.find_all('div', class_='score-team-row')
                 
                 if len(teams) == 2:
-                    team1_name = teams[0].find('span', class_='scores-text').text.strip()
-                    team2_name = teams[1].find('span', class_='scores-text').text.strip()
+                    team1_name = teams[0].find('span', class_='scores-text').text.strip() if teams[0].find('span', class_='scores-text') else "N/A"
+                    team2_name = teams[1].find('span', class_='scores-text').text.strip() if teams[1].find('span', class_='scores-text') else "N/A"
                     
-                    team1_score = teams[0].find('div', class_='score-team-score').find('span', class_='scores-text').text.strip()
-                    team2_score = teams[1].find('div', class_='score-team-score').find('span', class_='scores-text').text.strip()
+                    team1_score_div = teams[0].find('div', class_='score-team-score')
+                    team2_score_div = teams[1].find('div', class_='score-team-score')
                     
-                    team1_logo = teams[0].find('img', class_='team-logo')['src'].replace('80.80', '300.300')
-                    team2_logo = teams[1].find('img', class_='team-logo')['src'].replace('80.80', '300.300')
+                    team1_score = team1_score_div.find('span', class_='scores-text').text.strip() if team1_score_div and team1_score_div.find('span', class_='scores-text') else "N/A"
+                    team2_score = team2_score_div.find('span', class_='scores-text').text.strip() if team2_score_div and team2_score_div.find('span', class_='scores-text') else "N/A"
+                    
+                    team1_logo = teams[0].find('img', class_='team-logo')['src'].replace('80.80', '300.300') if teams[0].find('img', class_='team-logo') else None
+                    team2_logo = teams[1].find('img', class_='team-logo')['src'].replace('80.80', '300.300') if teams[1].find('img', class_='team-logo') else None
                     
                     scores_data.append({
                         'sport': sport,
@@ -85,7 +88,9 @@ def run(screen):
     BACK_BUTTON_POS = (screen_width // 2, screen_height * 9 // 10)
     BACK_BUTTON_RADIUS = 40
     rotate_interval = 10  # seconds
-    fade_speed = 5
+    fade_duration = 1  # seconds for fade-in effect
+    fps = 30  # frames per second
+    fade_speed = 255 / (fade_duration * fps)  # Alpha change per frame for a 1-second fade
 
     background_image_path = './apps/app_2/background.jpg'
     background_image = pygame.image.load(background_image_path)
@@ -97,9 +102,8 @@ def run(screen):
 
     scores = get_scores(sports_to_scrape)
     score_index = 0
-    alpha = 255
+    alpha = 0  # Start from 0 for a fade-in effect
     fade_in = True
-    fade_out = False
     start_time = time.time()
 
     def draw_back_button():
@@ -112,9 +116,13 @@ def run(screen):
         draw_back_button()
 
         current_time = time.time()
+
+        # Check for automatic rotation based on time
         if current_time - start_time > rotate_interval:
-            fade_out = True
-            fade_in = False
+            score_index = (score_index + 1) % len(scores)
+            alpha = 0  # Reset alpha for fade-in effect
+            fade_in = True
+            start_time = current_time
 
         if scores:
             score = scores[score_index]
@@ -133,47 +141,40 @@ def run(screen):
                 team1_score = team2_score = ""
                 sport_name = ""
 
+            # Handle fade-in effect
             if fade_in:
                 alpha += fade_speed
                 if alpha >= 255:
                     alpha = 255
                     fade_in = False
-            elif fade_out:
-                alpha -= fade_speed
-                if alpha <= 0:
-                    alpha = 0
-                    fade_out = False
-                    fade_in = True
-                    start_time = current_time
-                    score_index = (score_index + 1) % len(scores)
 
             if team1_logo and team2_logo:
                 team1_logo = pygame.transform.scale(team1_logo, (300, 300))
                 team2_logo = pygame.transform.scale(team2_logo, (300, 300))
-                team1_logo.set_alpha(alpha)
-                team2_logo.set_alpha(alpha)
+                team1_logo.set_alpha(int(alpha))
+                team2_logo.set_alpha(int(alpha))
 
                 screen.blit(team1_logo, (CENTER[0] - 400, CENTER[1] - 100))
                 screen.blit(team2_logo, (CENTER[0] + 100, CENTER[1] - 100))
 
             sport_text_surface = font_sport.render(sport_name, True, WHITE)
-            sport_text_surface.set_alpha(alpha)
+            sport_text_surface.set_alpha(int(alpha))
             sport_text_rect = sport_text_surface.get_rect(center=(CENTER[0], CENTER[1] - 400))
             screen.blit(sport_text_surface, sport_text_rect)
 
             team1_text_surface = font_large.render(team1_name, True, WHITE)
-            team1_text_surface.set_alpha(alpha)
+            team1_text_surface.set_alpha(int(alpha))
             team1_text_rect = team1_text_surface.get_rect(center=(CENTER[0] - 250, CENTER[1] - 250))
             screen.blit(team1_text_surface, team1_text_rect)
 
             team2_text_surface = font_large.render(team2_name, True, WHITE)
-            team2_text_surface.set_alpha(alpha)
+            team2_text_surface.set_alpha(int(alpha))
             team2_text_rect = team2_text_surface.get_rect(center=(CENTER[0] + 250, CENTER[1] - 250))
             screen.blit(team2_text_surface, team2_text_rect)
 
             score_text = f"{team1_score} - {team2_score}"
             score_surface = font_score.render(score_text, True, WHITE)
-            score_surface.set_alpha(alpha)
+            score_surface.set_alpha(int(alpha))
             score_rect = score_surface.get_rect(center=(CENTER[0], CENTER[1] + 300))
             screen.blit(score_surface, score_rect)
         else:
@@ -184,11 +185,18 @@ def run(screen):
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
+                # Check if back button is clicked
                 if math.hypot(event.pos[0] - BACK_BUTTON_POS[0], event.pos[1] - BACK_BUTTON_POS[1]) <= BACK_BUTTON_RADIUS:
                     running = False  # Exit the loop if back button is pressed
+                else:
+                    # Go to the next game on any other click
+                    score_index = (score_index + 1) % len(scores)
+                    alpha = 0  # Reset alpha for new fade-in effect
+                    fade_in = True
+                    start_time = current_time
 
         pygame.display.flip()
-        clock.tick(30)
+        clock.tick(fps)
 
 if __name__ == "__main__":
     pygame.init()
